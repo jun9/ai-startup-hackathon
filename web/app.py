@@ -27,15 +27,12 @@ def get_meal_data(image):
 
 # Function to predict nutrition from image
 def predict_nutrition(image):
-    # Preprocess the image
-    img = image.resize((224, 224))
-    img_array = np.array(img) / 255.0
+    # img = image.resize((224, 224))
+    img_array = np.array(image) 
     img_array = np.expand_dims(img_array, axis=0)
     
-    # Make prediction
     prediction = model.predict(img_array)
     
-    # Use the actual API to get the nutrition data
     nutrition_data = get_meal_data(image)
     
     return nutrition_data
