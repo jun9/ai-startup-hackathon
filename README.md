@@ -1,1 +1,1 @@
-# ai-startup-hackathon
+# AI Startup Hackathon - Diet Vision
