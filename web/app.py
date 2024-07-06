@@ -27,8 +27,13 @@ def get_meal_data(image):
 
 # Function to predict nutrition from image
 def predict_nutrition(image):
-    # img = image.resize((224, 224))
-    img_array = np.array(image) 
+    if image is None:
+        raise ValueError("No image provided")
+    img = image.resize((224, 224))
+    img_array = np.array(img)
+    if img_array.shape != (224, 224, 3):
+        raise ValueError(f"Invalid image shape: {img_array.shape}")
+    img_array = img_array / 255.0
     img_array = np.expand_dims(img_array, axis=0)
     
     prediction = model.predict(img_array)
