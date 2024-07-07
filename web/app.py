@@ -1,72 +1,67 @@
 import streamlit as st
+import pandas as pd
 import numpy as np
-import tensorflow as tf
 from PIL import Image
+import io
+import requests
 import logging
 
-# Logging
+# Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-@st.cache_resource
-def load_model():
+# Function to get data from API
+def get_meal_data(image):
+    url = 'http://34.203.252.91/'  # Adjust the endpoint as needed
     try:
-        model = tf.keras.models.load_model('raw_models/inceptionv3_tf.h5')
-        logger.info("Model loaded successfully")
-        return model
+        with io.BytesIO() as img_file:
+            image.save(img_file, format='PNG')
+            img_file.seek(0)
+            files = {'image': img_file}
+            response = requests.post(url, files=files, verify=False)  # Set verify=True if you have a valid SSL certificate
+        
+        if response.status_code == 200:
+            logger.info("Successfully received data from API")
+            return response.json()
+        else:
+            logger.error(f"API request failed with status code: {response.status_code}")
+            return {}
     except Exception as e:
-        logger.error(f"Error loading model: {str(e)}", exc_info=True)
-        return None
+        logger.error(f"Error in get_meal_data: {str(e)}")
+        return {}
 
-model = load_model()
 
 def predict_nutrition(image):
     if image is None:
         raise ValueError("No image provided")
     
-    logger.info(f"Starting prediction for image of size {image.size}")
+    nutrition_data = get_meal_data(image)
     
-    try:
-        img = image.resize((224, 224))
-        img = img.convert('RGB')  # Convert image to RGB
-        img_array = np.array(img)
-        
-        if img_array.shape != (224, 224, 3):
-            raise ValueError(f"Invalid image shape: {img_array.shape}")
-        
-        img_array = img_array / 255.0
-        img_array = np.expand_dims(img_array, axis=0)
-        
-        prediction = model.predict(img_array)
-        logger.info("Prediction successful")
-        
-        
-        nutrition_data = {
-            'calories': float(prediction[0][0]),
-            'protein': float(prediction[0][1]),
-            'carbohydrates': float(prediction[0][2]),
-            'fat': float(prediction[0][3])
-        }
-        
-        return nutrition_data
+    if not nutrition_data:
+        logger.warning("No nutrition data received from API")
+    else:
+        logger.info("Successfully predicted nutrition data")
     
-    except Exception as e:
-        logger.error(f"Error in predict_nutrition: {str(e)}", exc_info=True)
-        return None
+    return nutrition_data
 
+# Set page config
 st.title("Diet Vision")
 st.markdown("***A Diet Vision For a Healthier Tomorrow.***")
 
+# File uploader for meal photo
 uploaded_file = st.file_uploader("Choose a meal photo", type=["jpg", "png"])
 
 if uploaded_file is not None:
     try:
+        # Display the uploaded image
         image = Image.open(uploaded_file)
         st.image(image, caption="Uploaded Meal Photo", use_column_width=True)
-        
+
+        # Predict nutrition from the image
         nutrition_data = predict_nutrition(image)
-        
-        if nutrition_data is not None:
+
+        if nutrition_data:
+            # Display nutrition information
             st.header("Nutrition Information")
             col1, col2, col3, col4, col5 = st.columns(5)
             col1.metric("Mass", f"{nutrition_data.get('mass', 0):.0f} g")
@@ -75,31 +70,33 @@ if uploaded_file is not None:
             col4.metric("Carbs", f"{abs(nutrition_data.get('carbohydrates', 0)):.1f} g")
             col5.metric("Fat", f"{nutrition_data.get('fat', 0):.1f} g")
 
+            # Daily nutrition goals progress
             st.header("Daily Nutrition Goals")
             calories_progress = nutrition_data.get('calories', 0) / 2000  # Assuming 2000 kcal daily goal
             st.progress(calories_progress)
             st.text(f"{calories_progress*100:.1f}% of daily calorie goal")
 
+            # Nutrients list
             st.header("Nutrients")
             for nutrient, amount in nutrition_data.items():
                 st.text(f"{nutrient.capitalize()}: {abs(amount):.1f}")
 
+            # Interactive percentage bar
             st.header("Adjust Consumed Amount")
             consumed_percentage = st.slider("Percentage of meal consumed", 0, 100, 100)
-            
-            # Update nutrition
+
+            # Update nutrition based on consumed percentage
             adjusted_nutrition = {k: v * consumed_percentage / 100 for k, v in nutrition_data.items()}
-            
+
             st.header("Adjusted Nutrition")
             col1, col2, col3 = st.columns(3)
             col1.metric("Adjusted Calories", f"{adjusted_nutrition.get('calories', 0):.0f} cal")
             col2.metric("Adjusted Protein", f"{adjusted_nutrition.get('protein', 0):.1f} g")
             col3.metric("Adjusted Carbs", f"{abs(adjusted_nutrition.get('carbohydrates', 0)):.1f} g")
         else:
-            st.error("Failed to predict nutrition data. Please try again with a different image.")
-    
+            st.error("Failed to retrieve nutrition data from the API. Please try again or contact support.")
     except Exception as e:
-        st.error(f"An unexpected error occurred: {str(e)}")
-        logger.error(f"Unexpected error in main app flow: {str(e)}", exc_info=True)
+        logger.error(f"An error occurred: {str(e)}")
+        st.error(f"An unexpected error occurred: {str(e)}. Please try again or contact support.")
 else:
     st.info("Please upload a meal photo to start tracking your nutrition.")
